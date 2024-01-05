@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const passportLocalMongoose = require("passport-local-mongoose");
 
 const facultySchema = new mongoose.Schema({
   name: {
@@ -12,7 +13,6 @@ const facultySchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
   },
   department: {
     type: String,
@@ -23,7 +23,16 @@ const facultySchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  role: {
+    type: String,
+    default: "faculty",
+  },
 });
+
+// Add Passport Local Mongoose plugin
+// facultySchema.plugin(passportLocalMongoose, {
+//   usernameField: "email", // Specify the field to use for username (email in this case)
+// });
 
 const Faculty = mongoose.model("faculty", facultySchema);
 module.exports = Faculty;
