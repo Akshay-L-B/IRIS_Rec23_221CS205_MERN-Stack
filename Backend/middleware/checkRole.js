@@ -1,3 +1,6 @@
+const jwt = require("jsonwebtoken");
+const jwtPassword = "secretsCantBeRevealed";
+
 const {
   validateStudentUser,
   validateAdminUser,
@@ -6,7 +9,8 @@ const {
 
 const checkRole = (allowedRoles) => {
   return (req, res, next) => {
-    const token = req.headers.authorization;
+    const authHeader = req.headers.authorization;
+    const token = jwt.decode(authHeader);
     const role = token.role;
     if (allowedRoles.includes(role)) {
       req.role = role;
@@ -16,6 +20,14 @@ const checkRole = (allowedRoles) => {
       res.status(401).send("Unauthorized");
     }
   };
+};
+
+const assignRole = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = jwt.decode(authHeader);
+  const role = token.role;
+  req.role = role;
+  next();
 };
 
 const validateUser = (req, res, next) => {
@@ -32,4 +44,4 @@ const validateUser = (req, res, next) => {
   }
 };
 
-module.exports = { checkRole, validateUser };
+module.exports = { checkRole, validateUser, assignRole };

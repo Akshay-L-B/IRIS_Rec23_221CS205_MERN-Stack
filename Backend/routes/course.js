@@ -1,7 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const Course = require("../db/models/Course");
-const { checkRole, validateUser } = require("../middleware/checkRole");
+const {
+  checkRole,
+  validateUser,
+  assignRole,
+} = require("../middleware/checkRole");
 
 // ROUTE 1 : To create a new course : requires auth
 router.post(
@@ -114,7 +118,7 @@ router.put(
 //ROUTE 3 : Delete a course using DELETE : requires auth
 router.delete(
   "/deleteCourse/:id",
-  checkRole[("admin", "faculty")],
+  checkRole(["admin", "faculty"]),
   validateUser,
   async (req, res) => {
     const courseID = req.params.id;
@@ -140,21 +144,42 @@ router.get("/getAllCourses", async (req, res) => {
   }
 });
 
-//ROUTE 5 : Get a student's department course which is not enrolled: requires auth
-router.get("/getDepartmentCourses", validateStudentUser, async (req, res) => {
-  try {
-    const department = req.user.department;
-    const coursesNotEnrolled = await Course.find({
-      department: department,
-      _id: { $nin: req.user.enrolledCourses },
-    });
-
-    res.status(200).json({ "Available Courses": coursesNotEnrolled });
-  } catch (error) {
-    console.error("Error displaying courses: ", error.message);
-    res.status(500).json("Error displaying courses");
+//ROUTE to get all department courses available
+router.get(
+  "/getDepartmentCourses",
+  assignRole,
+  validateUser,
+  async (req, res) => {
+    try {
+      const courses = await Course.find({ department: req.user.department });
+      res.status(200).json(courses);
+    } catch (error) {
+      console.error("Error displaying courses");
+      res.status(500).json("Error displaying courses");
+    }
   }
-});
+);
+
+//ROUTE 5 : Get a student's department course which is not enrolled: requires auth
+router.get(
+  "/getAvailableCourses",
+  assignRole,
+  validateUser,
+  async (req, res) => {
+    try {
+      const department = req.user.department;
+      const coursesNotEnrolled = await Course.find({
+        department: department,
+        _id: { $nin: req.user.enrolledCourses },
+      });
+
+      res.status(200).json(coursesNotEnrolled);
+    } catch (error) {
+      console.error("Error displaying courses: ", error.message);
+      res.status(500).json("Error displaying courses");
+    }
+  }
+);
 
 //ROUTE 6 : To search for courses by code, title, or department
 router.get("/search", async (req, res) => {

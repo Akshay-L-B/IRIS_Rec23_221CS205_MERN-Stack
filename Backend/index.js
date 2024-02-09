@@ -14,6 +14,7 @@ app.use("/student", require("./routes/student"));
 app.use("/admin", require("./routes/admin"));
 app.use("/faculty", require("./routes/faculty"));
 app.use("/course", require("./routes/course"));
+app.use("/cart", require("./routes/cart"));
 
 app.get("/", (req, res) => {
   res.send("Hello IRIS");

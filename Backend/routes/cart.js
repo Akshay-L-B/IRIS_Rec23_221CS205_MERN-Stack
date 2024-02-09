@@ -3,14 +3,16 @@ const router = express.Router();
 const Cart = require("../db/models/Cart");
 const Course = require("../db/models/Course");
 const Student = require("../db/models/Student");
+const { validateUser, assignRole } = require("../middleware/checkRole");
 
 // Set the dead line here
 const deadline = new Date("2023-01-31");
 
 // ROUTE 1 : To add a course to the student's cart
-router.post("/add-to-cart", async (req, res) => {
+router.post("/add-to-cart", assignRole, validateUser, async (req, res) => {
   try {
-    const { studentId, courseId } = req.body;
+    const studentId = req.user._id;
+    const { courseId } = req.body;
 
     // Check if the student and course exist
     const student = await Student.findById(studentId);
@@ -42,87 +44,98 @@ router.post("/add-to-cart", async (req, res) => {
 });
 
 // Endpoint to finalize enrollment using courses in the cart
-router.post("/finalize-enrollment", async (req, res) => {
-  try {
-    const { studentId } = req.body;
+router.post(
+  "/finalize-enrollment",
+  assignRole,
+  validateUser,
+  async (req, res) => {
+    try {
+      const studentId = req.user._id;
 
-    // Retrieve the student's cart
-    const cart = await Cart.findOne({ student: studentId });
+      // Retrieve the student's cart
+      const cart = await Cart.findOne({ student: studentId });
 
-    if (!cart) {
-      return res.status(404).json({ message: "Your cart is empty!" });
-    }
+      if (!cart) {
+        return res.status(404).json({ message: "Your cart is empty!" });
+      }
 
-    // Retrieve the enrolled courses from the cart
-    const enrolledCourses = cart.courses;
-    enrolledCourses.map(async (course) => {
-      await Course.findByIdAndUpdate(course._id, {
-        $push: { requestedStudents: studentId },
+      // Retrieve the enrolled courses from the cart
+      const enrolledCourses = cart.courses;
+      enrolledCourses.map(async (course) => {
+        await Course.findByIdAndUpdate(course._id, {
+          $push: { requestedStudents: studentId },
+        });
       });
-    });
 
-    // Retrieve the student
-    const student = await Student.findById(studentId);
+      // Retrieve the student
+      // const student = await Student.findById(studentId);
 
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
+      // if (!student) {
+      //   return res.status(404).json({ message: "Student not found" });
+      // }
+
+      // // Add the enrolled courses to the student's enrolledCourses field
+      // student.enrolledCourses = student.enrolledCourses.concat(enrolledCourses);
+
+      // // Save the updated student
+      // await student.save();
+
+      // Clear the courses from the cart after enrollment
+      cart.courses = [];
+      await cart.save();
+
+      res.status(200).json({ message: "Enrollment completed successfully" });
+    } catch (error) {
+      console.error("Error finalizing enrollment:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
-
-    // Add the enrolled courses to the student's enrolledCourses field
-    student.enrolledCourses = student.enrolledCourses.concat(enrolledCourses);
-
-    // Save the updated student
-    await student.save();
-
-    // Clear the courses from the cart after enrollment
-    cart.courses = [];
-    await cart.save();
-
-    res.status(200).json({ message: "Enrollment completed successfully" });
-  } catch (error) {
-    console.error("Error finalizing enrollment:", error);
-    res.status(500).json({ message: "Internal server error" });
   }
-});
+);
 
 //ROUTE 3 : Delete from cart : requires auth
-router.delete("/remove-from-cart", async (req, res) => {
-  try {
-    const { studentId, courseId } = req.body;
+router.delete(
+  "/remove-from-cart",
+  assignRole,
+  validateUser,
+  async (req, res) => {
+    try {
+      const studentId = req.user._id;
+      const { courseId } = req.body;
 
-    // Check if the student and course exist
-    const student = await Student.findById(studentId);
-    const course = await Course.findById(courseId);
+      // Check if the student and course exist
+      const student = await Student.findById(studentId);
+      const course = await Course.findById(courseId);
 
-    if (!student || !course) {
-      return res.status(404).json({ message: "Student or course not found" });
+      if (!student || !course) {
+        return res.status(404).json({ message: "Student or course not found" });
+      }
+
+      // Check if the student has a cart
+      const cart = await Cart.findOne({ student: studentId });
+
+      if (!cart) {
+        return res
+          .status(404)
+          .json({ message: "Cart not found for the student" });
+      }
+
+      // Remove the course from the cart
+      cart.courses = cart.courses.filter(
+        (cartCourseId) => cartCourseId.toString() !== courseId
+      );
+
+      // Save the updated cart
+      await cart.save();
+
+      res
+        .status(200)
+        .json({ message: "Course removed from the cart successfully" });
+    } catch (error) {
+      console.error("Error removing course from cart:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
-
-    // Check if the student has a cart
-    const cart = await Cart.findOne({ student: studentId });
-
-    if (!cart) {
-      return res
-        .status(404)
-        .json({ message: "Cart not found for the student" });
-    }
-
-    // Remove the course from the cart
-    cart.courses = cart.courses.filter(
-      (cartCourseId) => cartCourseId.toString() !== courseId
-    );
-
-    // Save the updated cart
-    await cart.save();
-
-    res
-      .status(200)
-      .json({ message: "Course removed from the cart successfully" });
-  } catch (error) {
-    console.error("Error removing course from cart:", error);
-    res.status(500).json({ message: "Internal server error" });
   }
-});
+);
 
 //ROUTE 4 : Drop a course before deadline using DELETE : requires auth
 router.delete("/drop-course", async (req, res) => {
@@ -167,6 +180,30 @@ router.delete("/drop-course", async (req, res) => {
   } catch (error) {
     console.error("Error dropping course:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+//ROUTE to display all the cart courses
+router.get("/showCart", assignRole, validateUser, async (req, res) => {
+  try {
+    const studentId = req.user._id.toString();
+
+    // Find the cart for the logged-in student
+    const cart = await Cart.findOne({ student: studentId });
+
+    if (!cart) {
+      return res
+        .status(404)
+        .json({ message: "Cart not found for the student" });
+    }
+
+    const cartCoursesIds = cart.courses;
+    const courses = await Course.find({ _id: { $in: cartCoursesIds } });
+
+    res.status(200).json(courses);
+  } catch (error) {
+    console.error("Error fetching courses from cart:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
